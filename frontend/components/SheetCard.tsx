@@ -40,7 +40,7 @@ const SheetCard = ({ id, title, description, createdAt }: SheetCardProps) => {
 
       {/* Bottom Section */}
       <div className="mt-6 pt-4 border-t border-white/5 text-xs text-white/30 flex justify-between items-center">
-        <span>{new Date(createdAt).toLocaleDateString()}</span>
+        <span>Date</span>
 
         <span className="opacity-0 group-hover:opacity-100 transition text-indigo-400">
           Open →
