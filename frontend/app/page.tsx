@@ -33,8 +33,9 @@ export default function Home() {
         </nav>
         <div className="flex-1 flex items-center flex-col gap-20 max-w-5xl p-5">
           <Hero />
-
-          <Button className="h-[40] w-[100] text-xl">Create</Button>
+          <Link href={"/protected/create"}>
+            <Button className="h-[40] w-[100] text-xl">Create</Button>
+          </Link>
         </div>
       </div>
     </main>

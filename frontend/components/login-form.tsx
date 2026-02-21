@@ -33,11 +33,13 @@ export function LoginForm({
     setError(null);
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
       if (error) throw error;
+      // console.log("Access token:", data?.session?.access_token);
+      // localStorage.setItem("Token", data?.session?.access_token);
       // Update this route to redirect to an authenticated route. The user already has an active session.
       router.push("/protected");
     } catch (error: unknown) {
@@ -94,7 +96,7 @@ export function LoginForm({
               </Button>
             </div>
             <div className="mt-4 text-center text-sm">
-              Don&apos;t have an account?{" "}
+              Dont have an account?{" "}
               <Link
                 href="/auth/sign-up"
                 className="underline underline-offset-4"
