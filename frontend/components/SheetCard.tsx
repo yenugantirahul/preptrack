@@ -6,7 +6,7 @@ interface SheetCardProps {
   id: string;
   title: string;
   description: string;
-  createdAt?: string;
+  createdAt?: string | undefined;
 }
 const SheetCard = ({ id, title, description, createdAt }: SheetCardProps) => {
   return (
