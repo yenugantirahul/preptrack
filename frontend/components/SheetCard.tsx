@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import React from "react";
 
 interface SheetCardProps {
@@ -42,9 +43,9 @@ const SheetCard = ({ id, title, description, createdAt }: SheetCardProps) => {
       <div className="mt-6 pt-4 border-t border-white/5 text-xs text-white/30 flex justify-between items-center">
         <span>Date</span>
 
-        <span className="opacity-0 group-hover:opacity-100 transition text-indigo-400">
+        <Link href={`/protected/questions/${id}`} className="opacity-0 group-hover:opacity-100 transition text-indigo-400">
           Open →
-        </span>
+        </Link>
       </div>
     </div>
   );
