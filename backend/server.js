@@ -2,6 +2,7 @@ import express from "express";
 import dotenv from "dotenv";
 import cors from "cors";
 import sheetRoutes from "./routes/sheetRoutes.js";
+import questionRoutes from "./routes/questionsRoutes.js";
 
 const app = express();
 app.use(express.json());
@@ -17,6 +18,7 @@ app.use(
 );
 
 app.use("/api/sheets", sheetRoutes);
+app.use("/api/questions", questionRoutes);
 app.listen(PORT, () => {
   console.log(`Listening on port ${PORT}`);
 });

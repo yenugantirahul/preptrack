@@ -37,7 +37,6 @@ const CreateSheetPage = () => {
       setLoading(false);
     }
   };
-
   async function createSheet(title: string, desc: string, token: string) {
     try {
       const response = await fetch("http://localhost:3001/api/sheets/create", {
@@ -51,7 +50,7 @@ const CreateSheetPage = () => {
 
       const data = await response.json();
       if (!response.ok) throw new Error(data.error);
-    } catch (err: any) {
+    } catch (err) {
       console.error(err.message);
     }
   }

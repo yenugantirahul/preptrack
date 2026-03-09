@@ -1,4 +1,5 @@
 // middleware/authMiddleware.js
+
 import dotenv from "dotenv";
 dotenv.config();
 import { createClient } from "@supabase/supabase-js";
@@ -16,7 +17,7 @@ async function getAuthenticatedUser(req) {
     throw new Error("Missing token");
   }
 
-  const token = authHeader.split(" ")[1];
+const token = authHeader.split(" ")[1];
 
   const {
     data: { user },
