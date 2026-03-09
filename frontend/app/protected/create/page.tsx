@@ -50,7 +50,7 @@ const CreateSheetPage = () => {
 
       const data = await response.json();
       if (!response.ok) throw new Error(data.error);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err.message);
     }
   }
