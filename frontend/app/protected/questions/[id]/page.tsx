@@ -6,9 +6,10 @@ import { createClient } from "@/lib/supabase/client";
 
 interface Question {
   id: string;
-  serialNo: number;
+  si: number;
   title?: string;
   url: string;
+
   platform: string;
   difficulty: string;
   status?: "Solved" | "Attempted" | "Todo";
@@ -122,9 +123,7 @@ function TrackerContent() {
     }
   }
 
-  function handleSubmit() {
-   
-  }
+ 
 
   return (
     <div className="min-h-screen bg-[#07090f] text-gray-200 font-sans">
@@ -229,7 +228,7 @@ function QuestionsList({
             <div className="flex items-start justify-between gap-3 mb-3">
               <div>
                 <p className="text-xs text-gray-500 mb-1">Question No.</p>
-                <p className="text-sm font-semibold">{q.serialNo}</p>
+                <p className="text-sm font-semibold">{q.si}</p>
               </div>
               <span className="text-xs px-2 py-1 rounded-md bg-white/5 border border-white/10">
                 {q.status || "Todo"}
