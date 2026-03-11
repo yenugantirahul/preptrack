@@ -9,7 +9,6 @@ interface Question {
   si: number;
   title?: string;
   url: string;
-
   platform: string;
   difficulty: string;
   status?: "Solved" | "Attempted" | "Todo";
@@ -29,58 +28,69 @@ export default function TrackerPage() {
 function TrackerContent() {
   const params = useParams();
   const id = params.id as string;
-  const num = Number(id)
 
   const [loading, setLoading] = useState(false);
   const [questionsLoading, setQuestionsLoading] = useState(false);
 
-  const [platform, setPlatForm] = useState<string>("");
-  const [url, setUrl] = useState<string>("");
-  const [difficulty, setDifficulty] = useState<string>("");
-  const [si, setSi] = useState<number>(0);
+  const [platform, setPlatForm] = useState("");
+  const [url, setUrl] = useState("");
+  const [difficulty, setDifficulty] = useState("");
+  const [si, setSi] = useState<number | "">("");
 
   const [questions, setQuestions] = useState<Question[]>([]);
 
   const supabase = createClient();
 
   const fetchQuestions = async () => {
-  try {
-    setQuestionsLoading(true);
+    try {
+      setQuestionsLoading(true);
 
-    const res = await fetch(
-      `http://localhost:3001/api/questions/getquestions/${num}`,
-      {
+      const res = await fetch(`http://localhost:3001/api/questions/getquestions/${id}`, {
         method: "GET",
+      });
+
+      if (!res.ok) {
+        throw new Error("Failed to fetch questions");
       }
-    );
 
-    if (!res.ok) throw new Error("Failed to fetch questions");
-
-    const data = await res.json();
-    setQuestions(data.ques);
-  } catch (error) {
-    console.error("fetchQuestions error:", error);
-  } finally {
-    setQuestionsLoading(false);
-  }
-};
+      const data = await res.json();
+      setQuestions(data.ques ?? []);
+    } catch (error) {
+      console.error("fetchQuestions error:", error);
+    } finally {
+      setQuestionsLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (!id) return;
     fetchQuestions();
   }, [id]);
- console.log(questions)
+
   async function createQuestion() {
     try {
+      if (!si || !url || !platform || !difficulty) {
+        alert("Please fill all fields");
+        return;
+      }
+
       setLoading(true);
 
       const {
         data: { session },
+        error: sessionError,
       } = await supabase.auth.getSession();
+
+      if (sessionError || !session?.access_token) {
+        throw new Error("Authentication failed: " + (sessionError?.message || "No session"));
+      }
 
       const res = await fetch("http://localhost:3001/api/questions/create", {
         method: "POST",
-    
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
         body: JSON.stringify({
           no: Number(si),
           difficulty,
@@ -89,18 +99,25 @@ function TrackerContent() {
         }),
       });
 
-      if (!res.ok) throw new Error("Failed to create question");
+      if (!res.ok) {
+        const errData = await res.json().catch(() => null);
+        throw new Error(errData?.error || "Failed to create question");
+      }
 
       const data = await res.json();
-      const curid = data.id;
 
-      const link = await fetch("http://localhost:3001/api/questions/linkquestion", {
+      // FIX: backend returns { question: data }
+      const curid = data.question?.id;
+
+      if (!curid) {
+        throw new Error("Question ID not returned from backend");
+      }
+
+      const linkRes = await fetch("http://localhost:3001/api/questions/linkquestion", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          ...(session?.access_token
-            ? { Authorization: `Bearer ${session.access_token}` }
-            : {}),
+          Authorization: `Bearer ${session.access_token}`,
         },
         body: JSON.stringify({
           qid: curid,
@@ -108,9 +125,12 @@ function TrackerContent() {
         }),
       });
 
-      if (!link.ok) throw new Error("Failed to link question");
+      if (!linkRes.ok) {
+        const errData = await linkRes.json().catch(() => null);
+        throw new Error(errData?.error || "Failed to link question");
+      }
 
-      setSi(0);
+      setSi("");
       setUrl("");
       setPlatForm("");
       setDifficulty("");
@@ -123,25 +143,14 @@ function TrackerContent() {
     }
   }
 
- 
-
   return (
     <div className="min-h-screen bg-[#07090f] text-gray-200 font-sans">
       <main className="max-w-6xl mx-auto px-4 sm:px-6 md:px-8 lg:px-10 py-6 sm:py-8 md:py-10 lg:py-12">
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-6 sm:mb-8">
           <StatCard label="Total" value={questions.length} />
-          <StatCard
-            label="Easy"
-            value={questions.filter((q) => q.difficulty === "Easy").length}
-          />
-          <StatCard
-            label="Medium"
-            value={questions.filter((q) => q.difficulty === "Medium").length}
-          />
-          <StatCard
-            label="Hard"
-            value={questions.filter((q) => q.difficulty === "Hard").length}
-          />
+          <StatCard label="Easy" value={questions.filter((q) => q.difficulty === "Easy").length} />
+          <StatCard label="Medium" value={questions.filter((q) => q.difficulty === "Medium").length} />
+          <StatCard label="Hard" value={questions.filter((q) => q.difficulty === "Hard").length} />
         </div>
 
         <div className="bg-[#0d1018] border border-blue-500/20 rounded-xl p-4 sm:p-5 md:p-6 shadow-lg mb-6 sm:mb-8">
@@ -218,13 +227,9 @@ function QuestionsList({
 
   return (
     <>
-      {/* Mobile / Tablet Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 lg:hidden">
         {questions.map((q) => (
-          <div
-            key={q.id}
-            className="bg-[#0d1018] border border-white/10 rounded-xl p-4"
-          >
+          <div key={q.id} className="bg-[#0d1018] border border-white/10 rounded-xl p-4">
             <div className="flex items-start justify-between gap-3 mb-3">
               <div>
                 <p className="text-xs text-gray-500 mb-1">Question No.</p>
@@ -249,7 +254,7 @@ function QuestionsList({
               <div>
                 <p className="text-xs text-gray-500 mb-1">Link</p>
                 <a
-                  href={`https://leetcode.com/${q.title}`}
+                  href={q.url}
                   target="_blank"
                   rel="noreferrer"
                   className="text-sm text-blue-400 hover:underline break-all"
@@ -262,7 +267,6 @@ function QuestionsList({
         ))}
       </div>
 
-      {/* Desktop Table */}
       <div className="hidden lg:block bg-[#0d1018] border border-white/10 rounded-xl overflow-hidden">
         <div className="px-4 sm:px-6 py-4 border-b border-white/10">
           <h2 className="text-base sm:text-lg font-semibold">All Questions</h2>
@@ -290,7 +294,7 @@ function QuestionsList({
                       href={q.url}
                       target="_blank"
                       rel="noreferrer"
-                      className="text-blue-400 hover:underline break-all"
+                      className="text-sm text-blue-400 hover:underline break-all"
                     >
                       {q.title || q.url}
                     </a>
@@ -334,7 +338,7 @@ function Input({
       <input
         value={value}
         onChange={(e) =>
-          setValue(type === "number" ? Number(e.target.value) : e.target.value)
+          setValue(type === "number" ? (e.target.value === "" ? "" : Number(e.target.value)) : e.target.value)
         }
         type={type}
         className="w-full min-w-0 bg-black/20 border border-white/10 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/40"
@@ -360,7 +364,7 @@ function Select({
       <select
         value={value}
         onChange={(e) => setValue(e.target.value)}
-        className="w-full min-w-0 bg-black border text-grey border-black/10 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+        className="w-full min-w-0 bg-black border text-gray-200 border-white/10 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/40"
       >
         <option value="">Select</option>
         {options.map((o) => (

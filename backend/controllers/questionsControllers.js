@@ -1,5 +1,4 @@
 import dotenv from "dotenv";
-
 dotenv.config();
 
 import { createClient } from "@supabase/supabase-js";
@@ -8,8 +7,6 @@ const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY,
 );
-
-// Helper to get authenticated user
 async function getAuthenticatedUser(req) {
   const authHeader = req.headers.authorization;
 
@@ -32,33 +29,38 @@ async function getAuthenticatedUser(req) {
 }
 
 function getQuestionName(url) {
-  const parts = url.split("/");
-  return parts[parts.length - 3];
+  const parts = url.split("/").filter(Boolean);
+  return parts[parts.length - 1] || "Untitled";
 }
 
-// Create Question
 export const createQuestion = async (req, res) => {
   try {
+    await getAuthenticatedUser(req);
+
     const { url, platform, difficulty, no } = req.body;
-    const title = getQuestionName(url);
-    if (!url || !platform || !difficulty) {
+
+    if (!url || !platform || !difficulty || no === undefined || no === null) {
       return res.status(400).json({ error: "Missing required fields" });
     }
+
+    const title = getQuestionName(url);
+
     const { data, error } = await supabase
       .from("Questions")
       .insert([
         {
           si: no,
-          title: title,
-          url: url,
-          platform: platform,
-          difficulty: difficulty,
+          title,
+          url,
+          platform,
+          difficulty,
         },
       ])
       .select()
       .single();
+
     if (error) {
-      return res.status(400).json({ error: error.message });
+      return res.status(500).json({ error: error.message });
     }
 
     return res.status(201).json({
@@ -66,48 +68,63 @@ export const createQuestion = async (req, res) => {
       question: data,
     });
   } catch (err) {
-    return res.status(400).json({ error: error.message });
+    const message = err instanceof Error ? err.message : "Unknown error";
+
+    if (message === "Missing token" || message === "Invalid or expired token") {
+      return res.status(401).json({ error: message });
+    }
+
+    return res.status(500).json({ error: message });
   }
 };
 
-
-// Create Link
 export const createLink = async (req, res) => {
   try {
+    await getAuthenticatedUser(req);
+
     const { sid, qid } = req.body;
+
     if (!sid || !qid) {
       return res.status(400).json({ error: "Missing required fields" });
     }
-    const { data, error } = await supabase.from("sheetquestions").insert([
-      {
-        sheetid: sid,
-        questionid: qid,
-      },
-    ]);
+
+    const { data, error } = await supabase
+      .from("sheetquestions")
+      .insert([
+        {
+          sheetid: sid,
+          questionid: qid,
+        },
+      ])
+      .select();
 
     if (error) {
-      return res.status(400).json({ err: error });
+      return res.status(500).json({ error: error.message });
     }
-    return res.status(400).json({
+
+    return res.status(200).json({
       message: "Link successful",
       ques: data,
     });
   } catch (err) {
-    return res.status(400).json({ error: err });
+    const message = err instanceof Error ? err.message : "Unknown error";
+
+    if (message === "Missing token" || message === "Invalid or expired token") {
+      return res.status(401).json({ error: message });
+    }
+
+    return res.status(500).json({ error: message });
   }
 };
 
-
-// GET Questions
 export const getQuestions = async (req, res) => {
   try {
-    const  sheetId  = req.params.id;
+    const sheetId = req.params.id;
 
     if (!sheetId) {
       return res.status(400).json({ message: "sheetId is required" });
     }
 
-    // Step 1: get question ids from sheetquestions
     const { data, error } = await supabase
       .from("sheetquestions")
       .select("questionid")
@@ -117,10 +134,15 @@ export const getQuestions = async (req, res) => {
       return res.status(500).json({ error: error.message });
     }
 
-    // Step 2: extract ids
-    const questionIds = data.map(q => q.questionid);
+    const questionIds = data.map((q) => q.questionid);
 
-    // Step 3: fetch questions using those ids
+    if (questionIds.length === 0) {
+      return res.status(200).json({
+        message: "Successful",
+        ques: [],
+      });
+    }
+
     const { data: questions, error: qerror } = await supabase
       .from("Questions")
       .select("*")
@@ -131,11 +153,11 @@ export const getQuestions = async (req, res) => {
     }
 
     return res.status(200).json({
-  message: "Successful",
-  ques: questions
-});
-
+      message: "Successful",
+      ques: questions,
+    });
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    const message = err instanceof Error ? err.message : "Unknown error";
+    return res.status(500).json({ error: message });
   }
 };

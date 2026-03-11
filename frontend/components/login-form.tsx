@@ -38,10 +38,10 @@ export function LoginForm({
         password,
       });
       if (error) throw error;
-      // console.log("Access token:", data?.session?.access_token);
-      // localStorage.setItem("Token", data?.session?.access_token);
+      console.log("Access token:", data?.session?.access_token);
+      localStorage.setItem("Token", data?.session?.access_token);
       // Update this route to redirect to an authenticated route. The user already has an active session.
-      router.push("/protected");
+      router.push("/");
     } catch (error: unknown) {
       setError(error instanceof Error ? error.message : "An error occurred");
     } finally {
