@@ -117,6 +117,29 @@ export const createLink = async (req, res) => {
   }
 };
 
+
+
+
+export const deletSheet = async (req, res) => {
+  try {
+
+    await getAuthenticatedUser(req); 
+    const {sid} = req.body;
+    const {data, err} = await supabase.from("Sheets").delete().eq("id", sid)
+    if (err) {
+      return res.status(500).json({ error: err.message });
+    }
+    return res.status(400).json({
+      message: "Deleted successfully",
+      data: data
+    })
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+}
+
+
+
 export const getQuestions = async (req, res) => {
   try {
     const sheetId = req.params.id;

@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
@@ -19,7 +19,13 @@ const DIFFICULTIES = ["Easy", "Medium", "Hard"];
 
 export default function TrackerPage() {
   return (
-    <Suspense fallback={<div className="p-4 sm:p-6 text-white">Loading...</div>}>
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-[#0b0d12] text-white flex items-center justify-center">
+          <div className="text-sm text-white/60">Loading...</div>
+        </div>
+      }
+    >
       <TrackerContent />
     </Suspense>
   );
@@ -39,15 +45,18 @@ function TrackerContent() {
 
   const [questions, setQuestions] = useState<Question[]>([]);
 
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
 
   const fetchQuestions = async () => {
     try {
       setQuestionsLoading(true);
 
-      const res = await fetch(`http://localhost:3001/api/questions/getquestions/${id}`, {
-        method: "GET",
-      });
+      const res = await fetch(
+        `http://localhost:3001/api/questions/getquestions/${id}`,
+        {
+          method: "GET",
+        }
+      );
 
       if (!res.ok) {
         throw new Error("Failed to fetch questions");
@@ -82,7 +91,9 @@ function TrackerContent() {
       } = await supabase.auth.getSession();
 
       if (sessionError || !session?.access_token) {
-        throw new Error("Authentication failed: " + (sessionError?.message || "No session"));
+        throw new Error(
+          "Authentication failed: " + (sessionError?.message || "No session")
+        );
       }
 
       const res = await fetch("http://localhost:3001/api/questions/create", {
@@ -105,8 +116,6 @@ function TrackerContent() {
       }
 
       const data = await res.json();
-
-      // FIX: backend returns { question: data }
       const curid = data.question?.id;
 
       if (!curid) {
@@ -143,41 +152,65 @@ function TrackerContent() {
     }
   }
 
-  return (
-    <div className="min-h-screen bg-[#07090f] text-gray-200 font-sans">
-      <main className="max-w-6xl mx-auto px-4 sm:px-6 md:px-8 lg:px-10 py-6 sm:py-8 md:py-10 lg:py-12">
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-6 sm:mb-8">
-          <StatCard label="Total" value={questions.length} />
-          <StatCard label="Easy" value={questions.filter((q) => q.difficulty === "Easy").length} />
-          <StatCard label="Medium" value={questions.filter((q) => q.difficulty === "Medium").length} />
-          <StatCard label="Hard" value={questions.filter((q) => q.difficulty === "Hard").length} />
-        </div>
+  const easyCount = questions.filter((q) => q.difficulty === "Easy").length;
+  const mediumCount = questions.filter((q) => q.difficulty === "Medium").length;
+  const hardCount = questions.filter((q) => q.difficulty === "Hard").length;
 
-        <div className="bg-[#0d1018] border border-blue-500/20 rounded-xl p-4 sm:p-5 md:p-6 shadow-lg mb-6 sm:mb-8">
-          <div className="flex items-start sm:items-center gap-3 mb-5 sm:mb-6">
-            <div className="w-9 h-9 shrink-0 rounded-md flex items-center justify-center bg-blue-500/10 border border-blue-500/20">
-              ➕
+  return (
+    <div className="min-h-screen bg-[#0b0d12] text-white">
+      <div className="border-b border-white/10 bg-[#0f1117]">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 md:px-8 lg:px-10 py-5 sm:py-6">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <p className="text-xs uppercase tracking-[0.2em] text-white/40">
+                PrepTrack
+              </p>
+              <h1 className="mt-2 text-2xl sm:text-3xl font-semibold tracking-tight">
+                Question Tracker
+              </h1>
+              <p className="mt-2 text-sm text-white/55 max-w-2xl">
+                Add and organize coding problems from different platforms in one
+                simple workspace.
+              </p>
             </div>
 
-            <div>
-              <div className="text-sm sm:text-base font-semibold">Add Coding Problem</div>
-              <div className="text-xs sm:text-sm text-gray-500">
-                Store problems you solve across platforms
-              </div>
+            <div className="text-sm text-white/45">
+              {questions.length} question{questions.length !== 1 ? "s" : ""}
             </div>
           </div>
+        </div>
+      </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-[90px_minmax(0,1fr)_180px_160px_auto] gap-3">
+      <main className="max-w-6xl mx-auto px-4 sm:px-6 md:px-8 lg:px-10 py-6 sm:py-8 md:py-10">
+        <div className="grid grid-cols-2 xl:grid-cols-4 gap-4 mb-6 sm:mb-8">
+          <StatCard label="Total" value={questions.length} />
+          <StatCard label="Easy" value={easyCount} />
+          <StatCard label="Medium" value={mediumCount} />
+          <StatCard label="Hard" value={hardCount} />
+        </div>
+
+        <section className="rounded-2xl border border-white/10 bg-[#12151d] p-4 sm:p-6 shadow-sm mb-6 sm:mb-8">
+          <div className="mb-5">
+            <h2 className="text-lg font-semibold tracking-tight">Add question</h2>
+            <p className="mt-1 text-sm text-white/50">
+              Save a problem you solved or want to revise later.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-[100px_minmax(0,1fr)_180px_160px_auto] gap-4">
             <Input setValue={setSi} label="No." type="number" value={si} />
-            <Input setValue={setUrl} label="Url" value={url} />
-
+            <Input
+              setValue={setUrl}
+              label="Problem URL"
+              value={url}
+              placeholder="https://..."
+            />
             <Select
               setValue={setPlatForm}
               label="Platform"
               options={PLATFORMS}
               value={platform}
             />
-
             <Select
               setValue={setDifficulty}
               label="Difficulty"
@@ -185,16 +218,18 @@ function TrackerContent() {
               value={difficulty}
             />
 
-            <button
-              type="button"
-              onClick={createQuestion}
-              disabled={loading}
-              className="h-[42px] w-full xl:w-auto px-5 rounded-lg text-sm font-semibold bg-gradient-to-r from-blue-500 to-purple-500 hover:translate-y-[-1px] transition disabled:opacity-50 mt-1 sm:mt-0"
-            >
-              {loading ? "Adding..." : "Add"}
-            </button>
+            <div className="flex items-end">
+              <button
+                type="button"
+                onClick={createQuestion}
+                disabled={loading}
+                className="h-11 w-full xl:w-auto px-5 rounded-xl bg-white text-black text-sm font-medium hover:bg-neutral-200 transition disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {loading ? "Adding..." : "Add Question"}
+              </button>
+            </div>
           </div>
-        </div>
+        </section>
 
         <QuestionsList questions={questions} loading={questionsLoading} />
       </main>
@@ -211,16 +246,20 @@ function QuestionsList({
 }) {
   if (loading) {
     return (
-      <div className="bg-[#0d1018] border border-white/10 rounded-xl p-4 sm:p-6">
-        <p className="text-sm text-gray-400">Loading questions...</p>
+      <div className="rounded-2xl border border-white/10 bg-[#12151d] p-5 sm:p-6">
+        <p className="text-sm text-white/55">Loading questions...</p>
       </div>
     );
   }
 
   if (questions.length === 0) {
     return (
-      <div className="bg-[#0d1018] border border-white/10 rounded-xl p-4 sm:p-6">
-        <p className="text-sm text-gray-400">No questions added yet.</p>
+      <div className="rounded-2xl border border-white/10 bg-[#12151d] p-8 sm:p-10 text-center">
+        <h3 className="text-lg font-semibold tracking-tight">No questions yet</h3>
+        <p className="mt-2 text-sm text-white/50 max-w-md mx-auto">
+          Start by adding your first coding question from LeetCode, Codeforces,
+          CodeChef, or AtCoder.
+        </p>
       </div>
     );
   }
@@ -229,30 +268,23 @@ function QuestionsList({
     <>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 lg:hidden">
         {questions.map((q) => (
-          <div key={q.id} className="bg-[#0d1018] border border-white/10 rounded-xl p-4">
-            <div className="flex items-start justify-between gap-3 mb-3">
+          <div
+            key={q.id}
+            className="rounded-2xl border border-white/10 bg-[#12151d] p-4"
+          >
+            <div className="flex items-start justify-between gap-3 mb-4">
               <div>
-                <p className="text-xs text-gray-500 mb-1">Question No.</p>
+                <p className="text-xs text-white/40 mb-1">Question No.</p>
                 <p className="text-sm font-semibold">{q.si}</p>
               </div>
-              <span className="text-xs px-2 py-1 rounded-md bg-white/5 border border-white/10">
-                {q.status || "Todo"}
-              </span>
+              <StatusBadge status={q.status || "Todo"} />
             </div>
 
             <div className="space-y-3">
+              <InfoRow label="Platform" value={q.platform} />
+              <InfoRow label="Difficulty" value={q.difficulty} />
               <div>
-                <p className="text-xs text-gray-500 mb-1">Platform</p>
-                <p className="text-sm">{q.platform}</p>
-              </div>
-
-              <div>
-                <p className="text-xs text-gray-500 mb-1">Difficulty</p>
-                <p className="text-sm">{q.difficulty}</p>
-              </div>
-
-              <div>
-                <p className="text-xs text-gray-500 mb-1">Link</p>
+                <p className="text-xs text-white/40 mb-1">Link</p>
                 <a
                   href={q.url}
                   target="_blank"
@@ -267,39 +299,46 @@ function QuestionsList({
         ))}
       </div>
 
-      <div className="hidden lg:block bg-[#0d1018] border border-white/10 rounded-xl overflow-hidden">
-        <div className="px-4 sm:px-6 py-4 border-b border-white/10">
-          <h2 className="text-base sm:text-lg font-semibold">All Questions</h2>
+      <div className="hidden lg:block rounded-2xl border border-white/10 bg-[#12151d] overflow-hidden">
+        <div className="px-5 sm:px-6 py-4 border-b border-white/10">
+          <h2 className="text-lg font-semibold tracking-tight">All Questions</h2>
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[700px] text-sm">
-            <thead className="bg-white/5 text-gray-400">
+          <table className="w-full min-w-[760px] text-sm">
+            <thead className="bg-white/5 text-white/45">
               <tr>
-                <th className="text-left px-4 sm:px-6 py-4 font-medium">No.</th>
-                <th className="text-left px-4 sm:px-6 py-4 font-medium">Platform</th>
-                <th className="text-left px-4 sm:px-6 py-4 font-medium">Difficulty</th>
-                <th className="text-left px-4 sm:px-6 py-4 font-medium">Link</th>
-                <th className="text-left px-4 sm:px-6 py-4 font-medium">Status</th>
+                <th className="text-left px-5 sm:px-6 py-4 font-medium">No.</th>
+                <th className="text-left px-5 sm:px-6 py-4 font-medium">Platform</th>
+                <th className="text-left px-5 sm:px-6 py-4 font-medium">Difficulty</th>
+                <th className="text-left px-5 sm:px-6 py-4 font-medium">Link</th>
+                <th className="text-left px-5 sm:px-6 py-4 font-medium">Status</th>
               </tr>
             </thead>
             <tbody>
               {questions.map((q) => (
-                <tr key={q.id} className="border-t border-white/5">
-                  <td className="px-4 sm:px-6 py-4">{q.si}</td>
-                  <td className="px-4 sm:px-6 py-4">{q.platform}</td>
-                  <td className="px-4 sm:px-6 py-4">{q.difficulty}</td>
-                  <td className="px-4 sm:px-6 py-4 max-w-[320px]">
+                <tr
+                  key={q.id}
+                  className="border-t border-white/5 hover:bg-white/[0.03] transition"
+                >
+                  <td className="px-5 sm:px-6 py-4">{q.si}</td>
+                  <td className="px-5 sm:px-6 py-4">{q.platform}</td>
+                  <td className="px-5 sm:px-6 py-4">
+                    <DifficultyBadge difficulty={q.difficulty} />
+                  </td>
+                  <td className="px-5 sm:px-6 py-4 max-w-[340px]">
                     <a
                       href={q.url}
                       target="_blank"
                       rel="noreferrer"
-                      className="text-sm text-blue-400 hover:underline break-all"
+                      className="text-blue-400 hover:underline break-all"
                     >
                       {q.title || q.url}
                     </a>
                   </td>
-                  <td className="px-4 sm:px-6 py-4">{q.status || "Todo"}</td>
+                  <td className="px-5 sm:px-6 py-4">
+                    <StatusBadge status={q.status || "Todo"} />
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -312,11 +351,11 @@ function QuestionsList({
 
 function StatCard({ label, value }: { label: string; value: number }) {
   return (
-    <div className="bg-[#0d1018] border border-white/10 rounded-xl px-4 sm:px-5 py-4 min-h-[92px] flex flex-col justify-center">
-      <div className="text-[10px] uppercase tracking-widest text-gray-500 font-mono mb-2">
+    <div className="rounded-2xl border border-white/10 bg-[#12151d] px-4 sm:px-5 py-4 min-h-[92px] flex flex-col justify-center">
+      <div className="text-[11px] uppercase tracking-[0.18em] text-white/40 mb-2">
         {label}
       </div>
-      <div className="text-xl sm:text-2xl font-semibold tracking-tight">{value}</div>
+      <div className="text-2xl font-semibold tracking-tight">{value}</div>
     </div>
   );
 }
@@ -326,22 +365,31 @@ function Input({
   setValue,
   type = "text",
   value,
+  placeholder,
 }: {
   label: string;
   setValue: React.Dispatch<React.SetStateAction<any>>;
   type?: string;
   value: any;
+  placeholder?: string;
 }) {
   return (
-    <div className="flex flex-col gap-1 w-full min-w-0">
-      <label className="text-xs text-gray-400">{label}</label>
+    <div className="flex flex-col gap-2 w-full min-w-0">
+      <label className="text-sm text-white/70">{label}</label>
       <input
         value={value}
+        placeholder={placeholder}
         onChange={(e) =>
-          setValue(type === "number" ? (e.target.value === "" ? "" : Number(e.target.value)) : e.target.value)
+          setValue(
+            type === "number"
+              ? e.target.value === ""
+                ? ""
+                : Number(e.target.value)
+              : e.target.value
+          )
         }
         type={type}
-        className="w-full min-w-0 bg-black/20 border border-white/10 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+        className="h-11 w-full min-w-0 rounded-xl bg-[#0d1016] border border-white/10 px-3.5 text-sm text-white placeholder:text-white/25 focus:outline-none focus:ring-2 focus:ring-white/20 focus:border-white/20"
       />
     </div>
   );
@@ -359,12 +407,12 @@ function Select({
   value: string;
 }) {
   return (
-    <div className="flex flex-col gap-1 w-full min-w-0">
-      <label className="text-xs text-gray-400">{label}</label>
+    <div className="flex flex-col gap-2 w-full min-w-0">
+      <label className="text-sm text-white/70">{label}</label>
       <select
         value={value}
         onChange={(e) => setValue(e.target.value)}
-        className="w-full min-w-0 bg-black border text-gray-200 border-white/10 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+        className="h-11 w-full min-w-0 rounded-xl bg-[#0d1016] text-white border border-white/10 px-3.5 text-sm focus:outline-none focus:ring-2 focus:ring-white/20 focus:border-white/20"
       >
         <option value="">Select</option>
         {options.map((o) => (
@@ -373,6 +421,51 @@ function Select({
           </option>
         ))}
       </select>
+    </div>
+  );
+}
+
+function StatusBadge({
+  status,
+}: {
+  status: "Solved" | "Attempted" | "Todo";
+}) {
+  const styles = {
+    Solved: "bg-emerald-500/10 text-emerald-300 border border-emerald-500/20",
+    Attempted: "bg-amber-500/10 text-amber-300 border border-amber-500/20",
+    Todo: "bg-white/5 text-white/70 border border-white/10",
+  };
+
+  return (
+    <span className={`inline-flex rounded-full px-2.5 py-1 text-xs ${styles[status]}`}>
+      {status}
+    </span>
+  );
+}
+
+function DifficultyBadge({ difficulty }: { difficulty: string }) {
+  const styles: Record<string, string> = {
+    Easy: "bg-emerald-500/10 text-emerald-300 border border-emerald-500/20",
+    Medium: "bg-amber-500/10 text-amber-300 border border-amber-500/20",
+    Hard: "bg-rose-500/10 text-rose-300 border border-rose-500/20",
+  };
+
+  return (
+    <span
+      className={`inline-flex rounded-full px-2.5 py-1 text-xs ${
+        styles[difficulty] || "bg-white/5 text-white/70 border border-white/10"
+      }`}
+    >
+      {difficulty}
+    </span>
+  );
+}
+
+function InfoRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-xs text-white/40 mb-1">{label}</p>
+      <p className="text-sm text-white">{value}</p>
     </div>
   );
 }
