@@ -90,7 +90,7 @@ function TrackerContent() {
 
   async function createQuestion() {
     try {
-      if (!si || !url || !platform || !difficulty) {
+      if (!url || !platform || !difficulty) {
         alert("Please fill all fields");
         return;
       }
@@ -167,68 +167,65 @@ function TrackerContent() {
       setLoading(false);
     }
   }
+async function toggleQuestionStatus(
+  questionId: string,
+  currentStatus?: boolean
+) {
+  const oldStatus = currentStatus === true;
+  const newStatus = !oldStatus;
 
-  async function toggleQuestionStatus(
-    questionId: string,
-    currentStatus?: boolean
-  ) {
-    const oldStatus = currentStatus === true;
-    const newStatus = !oldStatus;
+  try {
+    setUpdatingStatusId(questionId);
 
-    try {
-      setUpdatingStatusId(questionId);
+    const {
+      data: { session },
+      error: sessionError,
+    } = await supabase.auth.getSession();
 
-      const {
-        data: { session },
-        error: sessionError,
-      } = await supabase.auth.getSession();
-
-      if (sessionError || !session?.access_token) {
-        throw new Error(
-          "Authentication failed: " + (sessionError?.message || "No session")
-        );
-      }
-
-      // optimistic update
-      setQuestions((prev) =>
-        prev.map((q) =>
-          q.id === questionId ? { ...q, status: newStatus } : q
-        )
-      );
-
-      const res = await fetch(
-        `http://localhost:3001/api/questions/updatestatus/${questionId}`,
-        {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${session.access_token}`,
-          },
-          body: JSON.stringify({
-            status: newStatus,
-          }),
-        }
-      );
-
-      if (!res.ok) {
-        const errData = await res.json().catch(() => null);
-
-        // revert if API fails
-        setQuestions((prev) =>
-          prev.map((q) =>
-            q.id === questionId ? { ...q, status: oldStatus } : q
-          )
-        );
-
-        throw new Error(errData?.error || "Failed to update status");
-      }
-    } catch (error) {
-      console.error("toggleQuestionStatus error:", error);
-      alert(error instanceof Error ? error.message : "Failed to update status");
-    } finally {
-      setUpdatingStatusId(null);
+    if (sessionError || !session?.access_token) {
+      throw new Error("Authentication failed");
     }
+
+    // Optimistic Update
+    setQuestions((prev) =>
+      prev.map((q) =>
+        q.id === questionId ? { ...q, status: newStatus } : q
+      )
+    );
+
+    const res = await fetch(
+      `http://localhost:3001/api/questions/updatestatus/${questionId}`,
+      {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          status: newStatus,
+        }),
+      }
+    );
+
+    if (!res.ok) {
+      throw new Error("Failed to update status");
+    }
+
+  } catch (error) {
+    console.error("toggleQuestionStatus error:", error);
+
+    // Revert if failed
+    setQuestions((prev) =>
+      prev.map((q) =>
+        q.id === questionId ? { ...q, status: oldStatus } : q
+      )
+    );
+
+    alert(error instanceof Error ? error.message : "Update failed");
+  } finally {
+    setUpdatingStatusId(null);
   }
+}
 
   const easyCount = questions.filter((q) => q.difficulty === "Easy").length;
   const mediumCount = questions.filter((q) => q.difficulty === "Medium").length;
@@ -276,7 +273,6 @@ function TrackerContent() {
           </div>
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-[100px_minmax(0,1fr)_180px_160px_auto]">
-            <Input setValue={setSi} label="No." type="number" value={si} />
             <Input
               setValue={setUrl}
               label="Problem URL"
@@ -360,10 +356,7 @@ function QuestionsList({
             className="rounded-2xl border border-white/10 bg-[#12151d] p-4"
           >
             <div className="mb-4 flex items-start justify-between gap-3">
-              <div>
-                <p className="mb-1 text-xs text-white/40">Question No.</p>
-                <p className="text-sm font-semibold">{q.si ?? "-"}</p>
-              </div>
+             
 
               <StatusToggle
                 status={q.status}
@@ -400,14 +393,13 @@ function QuestionsList({
           <table className="w-full min-w-[760px] text-sm">
             <thead className="bg-white/5 text-white/45">
               <tr>
-                <th className="px-5 py-4 text-left font-medium sm:px-6">No.</th>
+                <th className="px-5 py-4 text-left font-medium sm:px-6">
+                  Link
+                </th>
                 <th className="px-5 py-4 text-left font-medium sm:px-6">
                   Platform
                 </th>
-                <th className="px-5 py-4 text-left font-medium sm:px-6">
-                  Difficulty
-                </th>
-                <th className="px-5 py-4 text-left font-medium sm:px-6">Link</th>
+                <th className="px-5 py-4 text-left font-medium sm:px-6">Difficulty</th>
                 <th className="px-5 py-4 text-left font-medium sm:px-6">
                   Status
                 </th>
@@ -419,11 +411,6 @@ function QuestionsList({
                   key={q.id}
                   className="border-t border-white/5 transition hover:bg-white/[0.03]"
                 >
-                  <td className="px-5 py-4 sm:px-6">{q.si ?? "-"}</td>
-                  <td className="px-5 py-4 sm:px-6">{q.platform}</td>
-                  <td className="px-5 py-4 sm:px-6">
-                    <DifficultyBadge difficulty={q.difficulty} />
-                  </td>
                   <td className="max-w-[340px] px-5 py-4 sm:px-6">
                     <a
                       href={q.url}
@@ -433,6 +420,10 @@ function QuestionsList({
                     >
                       {q.title || q.url}
                     </a>
+                  </td>
+                  <td className="px-5 py-4 sm:px-6">{q.platform}</td>
+                  <td className="px-5 py-4 sm:px-6">
+                    <DifficultyBadge difficulty={q.difficulty} />
                   </td>
                   <td className="px-5 py-4 sm:px-6">
                     <StatusToggle
@@ -450,7 +441,6 @@ function QuestionsList({
     </>
   );
 }
-
 function StatusToggle({
   status,
   onChange,
@@ -463,30 +453,41 @@ function StatusToggle({
   const checked = status === true;
 
   return (
-    <label className="inline-flex cursor-pointer select-none items-center gap-3">
-      <span className="relative inline-flex items-center justify-center">
-        <input
-          type="checkbox"
-          checked={checked}
-          onChange={onChange}
-          disabled={disabled}
-          className="peer sr-only"
-        />
-        <span className="flex h-5 w-5 items-center justify-center rounded border border-white/25 bg-transparent transition peer-checked:border-white peer-disabled:cursor-not-allowed peer-disabled:opacity-50">
-          <svg
-            className="h-3.5 w-3.5 text-white opacity-0 transition peer-checked:opacity-100"
-            viewBox="0 0 20 20"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2.5"
-          >
-            <path
-              d="M5 10.5l3 3 7-7"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-        </span>
+    <label
+      className={`inline-flex select-none items-center gap-3 ${
+        disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer"
+      }`}
+    >
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={onChange}
+        disabled={disabled}
+        className="sr-only"
+      />
+
+      <span
+        className={`flex h-5 w-5 items-center justify-center rounded border transition ${
+          checked
+            ? "border-white bg-white text-black"
+            : "border-white/25 bg-transparent text-transparent"
+        }`}
+      >
+        <svg
+          className={`h-3.5 w-3.5 transition ${
+            checked ? "opacity-100" : "opacity-0"
+          }`}
+          viewBox="0 0 20 20"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.5"
+        >
+          <path
+            d="M5 10.5l3 3 7-7"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
       </span>
 
       <span className="text-xs font-medium text-white/80">
@@ -495,7 +496,6 @@ function StatusToggle({
     </label>
   );
 }
-
 function StatCard({ label, value }: { label: string; value: number }) {
   return (
     <div className="flex min-h-[92px] flex-col justify-center rounded-2xl border border-white/10 bg-[#12151d] px-4 py-4 sm:px-5">

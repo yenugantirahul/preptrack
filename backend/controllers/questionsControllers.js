@@ -115,59 +115,32 @@ export const createLink = async (req, res) => {
     return res.status(500).json({ error: message });
   }
 };
+
 export const updatestatus = async (req, res) => {
   try {
-    const { sid, qid } = req.body;
+    const qid = req.params.id;
+    const { status } = req.body;
 
-    if (!sid || !qid) {
-      return res.status(400).json({ error: "Missing required fields" });
+    if (!qid) {
+      return res.status(400).json({ error: "Missing question id" });
     }
 
-    // Get all question IDs in the sheet
-    const { data, error: err1 } = await supabase
-      .from("sheetquestions")
-      .select("questionid")
-      .eq("sheetid", sid);
-
-    if (err1) throw err1;
-
-    const questionIds = data.map(q => q.questionid);
-
-    // Get their statuses
-    const { data: ques, error: err2 } = await supabase
+    const { error } = await supabase
       .from("Questions")
-      .select("id, status")
-      .in("id", questionIds);
-
-    if (err2) throw err2;
-
-    // Find the specific question
-    const question = ques.find(q => q.id === qid);
-
-    if (!question) {
-      return res.status(404).json({ error: "Question not found" });
-    }
-
-    const newStatus = !question.status;
-
-    // Update status
-    const { error: err3 } = await supabase
-      .from("Questions")
-      .update({ status: newStatus })
+      .update({ status })
       .eq("id", qid);
 
-    if (err3) throw err3;
+    if (error) throw error;
 
     return res.json({
-      message: "Status updated successfully",
-      status: newStatus
+      message: "Status updated",
+      status
     });
 
   } catch (error) {
     return res.status(500).json({ error: error.message });
   }
 };
-
 
 export const getQuestions = async (req, res) => {
   try {

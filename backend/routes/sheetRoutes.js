@@ -8,6 +8,5 @@ const router = express.Router();
 router.post("/create", createSheet);
 router.get("/get", getSheets);
 router.delete("/delete/:id", deleteSheet);
-router.patch("/updatestatus/:id", updatestatus);
 
 export default router;
