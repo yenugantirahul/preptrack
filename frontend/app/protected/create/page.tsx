@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import SheetCard from "@/components/SheetCard";
 
@@ -10,6 +10,9 @@ interface Sheet {
   desc: string;
   createdAt?: string;
 }
+
+const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
 const CreateSheetPage = () => {
   const [showForm, setShowForm] = useState(false);
@@ -22,46 +25,67 @@ const CreateSheetPage = () => {
 
   const supabase = useMemo(() => createClient(), []);
 
-  const fetchSheets = async () => {
+  const fetchSheets = useCallback(async () => {
     try {
       setLoading(true);
 
       const {
         data: { session },
+        error: sessionError,
       } = await supabase.auth.getSession();
 
-      if (!session) throw new Error("Not authenticated");
+      if (sessionError) {
+        throw sessionError;
+      }
 
-      const res = await fetch("http://localhost:3001/api/sheets/get", {
+      if (!session?.access_token) {
+        console.warn("No active session found");
+        setSheets([]);
+        return;
+      }
+
+      const res = await fetch(`${API_BASE_URL}/api/sheets/get`, {
+        method: "GET",
         headers: {
           Authorization: `Bearer ${session.access_token}`,
         },
       });
 
-      if (!res.ok) throw new Error("Failed to fetch sheets");
+      const data = await res.json().catch(() => null);
 
-      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data?.error || "Failed to fetch sheets");
+      }
 
-      const normalizedSheets: Sheet[] = (data.sheets || []).map((sheet: any) => ({
+      const rawSheets = Array.isArray(data)
+        ? data
+        : Array.isArray(data?.sheets)
+        ? data.sheets
+        : Array.isArray(data?.data)
+        ? data.data
+        : [];
+
+      const normalizedSheets: Sheet[] = rawSheets.map((sheet: any) => ({
         id: String(sheet.id),
-        title: sheet.title,
+        title: sheet.title ?? "",
         desc: sheet.desc ?? sheet.description ?? "",
-        createdAt: sheet.createdAt ?? sheet.created_at,
+        createdAt: sheet.createdAt ?? sheet.created_at ?? "",
       }));
 
       setSheets(normalizedSheets);
     } catch (err) {
       console.error("fetchSheets error:", err);
+      setSheets([]);
     } finally {
       setLoading(false);
     }
-  };
+  }, [supabase]);
 
   const createSheet = async (title: string, desc: string, token: string) => {
     try {
       setCreating(true);
 
-      const response = await fetch("http://localhost:3001/api/sheets/create", {
+      const response = await fetch(`${API_BASE_URL}/api/sheets/create`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -70,10 +94,10 @@ const CreateSheetPage = () => {
         body: JSON.stringify({ title, desc }),
       });
 
-      const data = await response.json();
+      const data = await response.json().catch(() => null);
 
       if (!response.ok) {
-        throw new Error(data.error || "Failed to create sheet");
+        throw new Error(data?.error || "Failed to create sheet");
       }
     } catch (err: any) {
       console.error("createSheet error:", err.message);
@@ -96,15 +120,12 @@ const CreateSheetPage = () => {
         throw new Error("User not authenticated");
       }
 
-      const res = await fetch(
-        `http://localhost:3001/api/sheets/delete/${sheetId}`,
-        {
-          method: "DELETE",
-          headers: {
-            Authorization: `Bearer ${session.access_token}`,
-          },
-        }
-      );
+      const res = await fetch(`${API_BASE_URL}/api/sheets/delete/${sheetId}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      });
 
       const data = await res.json().catch(() => null);
 
@@ -123,7 +144,19 @@ const CreateSheetPage = () => {
 
   useEffect(() => {
     fetchSheets();
-  }, []);
+  }, [fetchSheets]);
+
+  useEffect(() => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session) {
+        fetchSheets();
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, [supabase, fetchSheets]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
