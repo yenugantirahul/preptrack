@@ -39,7 +39,7 @@ export const createQuestion = async (req, res) => {
 
     const { url, platform, difficulty, no } = req.body;
 
-    if (!url || !platform || !difficulty || no === undefined || no === null) {
+    if (!url || !platform || !difficulty) {
       return res.status(400).json({ error: "Missing required fields" });
     }
 
@@ -49,7 +49,6 @@ export const createQuestion = async (req, res) => {
       .from("Questions")
       .insert([
         {
-          si: no,
           title,
           url,
           platform,
@@ -116,28 +115,58 @@ export const createLink = async (req, res) => {
     return res.status(500).json({ error: message });
   }
 };
-
-
-
-
-export const deletSheet = async (req, res) => {
+export const updatestatus = async (req, res) => {
   try {
+    const { sid, qid } = req.body;
 
-    await getAuthenticatedUser(req); 
-    const {sid} = req.body;
-    const {data, err} = await supabase.from("Sheets").delete().eq("id", sid)
-    if (err) {
-      return res.status(500).json({ error: err.message });
+    if (!sid || !qid) {
+      return res.status(400).json({ error: "Missing required fields" });
     }
-    return res.status(400).json({
-      message: "Deleted successfully",
-      data: data
-    })
+
+    // Get all question IDs in the sheet
+    const { data, error: err1 } = await supabase
+      .from("sheetquestions")
+      .select("questionid")
+      .eq("sheetid", sid);
+
+    if (err1) throw err1;
+
+    const questionIds = data.map(q => q.questionid);
+
+    // Get their statuses
+    const { data: ques, error: err2 } = await supabase
+      .from("Questions")
+      .select("id, status")
+      .in("id", questionIds);
+
+    if (err2) throw err2;
+
+    // Find the specific question
+    const question = ques.find(q => q.id === qid);
+
+    if (!question) {
+      return res.status(404).json({ error: "Question not found" });
+    }
+
+    const newStatus = !question.status;
+
+    // Update status
+    const { error: err3 } = await supabase
+      .from("Questions")
+      .update({ status: newStatus })
+      .eq("id", qid);
+
+    if (err3) throw err3;
+
+    return res.json({
+      message: "Status updated successfully",
+      status: newStatus
+    });
+
   } catch (error) {
     return res.status(500).json({ error: error.message });
   }
-}
-
+};
 
 
 export const getQuestions = async (req, res) => {

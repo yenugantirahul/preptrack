@@ -41,7 +41,15 @@ const CreateSheetPage = () => {
       if (!res.ok) throw new Error("Failed to fetch sheets");
 
       const data = await res.json();
-      setSheets(data.sheets || []);
+
+      const normalizedSheets: Sheet[] = (data.sheets || []).map((sheet: any) => ({
+        id: String(sheet.id),
+        title: sheet.title,
+        desc: sheet.desc ?? sheet.description ?? "",
+        createdAt: sheet.createdAt ?? sheet.created_at,
+      }));
+
+      setSheets(normalizedSheets);
     } catch (err) {
       console.error("fetchSheets error:", err);
     } finally {
@@ -115,7 +123,7 @@ const CreateSheetPage = () => {
 
   useEffect(() => {
     fetchSheets();
-  }, [supabase]);
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -153,7 +161,7 @@ const CreateSheetPage = () => {
   return (
     <div className="min-h-screen bg-[#0a0a0f] text-white">
       <div className="border-b border-white/10 bg-[#0f1117]">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <p className="text-xs uppercase tracking-[0.2em] text-white/40">
@@ -253,7 +261,7 @@ const CreateSheetPage = () => {
               {Array.from({ length: 8 }).map((_, i) => (
                 <div
                   key={i}
-                  className="h-52 rounded-2xl border border-white/10 bg-[#12151d] animate-pulse"
+                  className="h-52 animate-pulse rounded-2xl border border-white/10 bg-[#12151d]"
                 />
               ))}
             </div>

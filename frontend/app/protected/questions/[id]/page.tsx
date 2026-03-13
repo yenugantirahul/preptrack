@@ -6,12 +6,12 @@ import { createClient } from "@/lib/supabase/client";
 
 interface Question {
   id: string;
-  si: number;
+  si?: number;
   title?: string;
   url: string;
   platform: string;
   difficulty: string;
-  status?: "Solved" | "Attempted" | "Todo";
+  status?: boolean;
 }
 
 const PLATFORMS = ["LeetCode", "Codeforces", "CodeChef", "AtCoder"];
@@ -21,7 +21,7 @@ export default function TrackerPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen bg-[#0b0d12] text-white flex items-center justify-center">
+        <div className="flex min-h-screen items-center justify-center bg-[#0b0d12] text-white">
           <div className="text-sm text-white/60">Loading...</div>
         </div>
       }
@@ -44,6 +44,7 @@ function TrackerContent() {
   const [si, setSi] = useState<number | "">("");
 
   const [questions, setQuestions] = useState<Question[]>([]);
+  const [updatingStatusId, setUpdatingStatusId] = useState<string | null>(null);
 
   const supabase = useMemo(() => createClient(), []);
 
@@ -63,7 +64,18 @@ function TrackerContent() {
       }
 
       const data = await res.json();
-      setQuestions(data.ques ?? []);
+
+      const normalizedQuestions: Question[] = (data.ques ?? []).map((q: any) => ({
+        id: String(q.id),
+        si: q.si ?? q.no ?? undefined,
+        title: q.title,
+        url: q.url,
+        platform: q.platform,
+        difficulty: q.difficulty,
+        status: q.status === true,
+      }));
+
+      setQuestions(normalizedQuestions);
     } catch (error) {
       console.error("fetchQuestions error:", error);
     } finally {
@@ -122,17 +134,20 @@ function TrackerContent() {
         throw new Error("Question ID not returned from backend");
       }
 
-      const linkRes = await fetch("http://localhost:3001/api/questions/linkquestion", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({
-          qid: curid,
-          sid: id,
-        }),
-      });
+      const linkRes = await fetch(
+        "http://localhost:3001/api/questions/linkquestion",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({
+            qid: curid,
+            sid: id,
+          }),
+        }
+      );
 
       if (!linkRes.ok) {
         const errData = await linkRes.json().catch(() => null);
@@ -147,8 +162,71 @@ function TrackerContent() {
       await fetchQuestions();
     } catch (error) {
       console.error("createQuestion error:", error);
+      alert(error instanceof Error ? error.message : "Failed to create question");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function toggleQuestionStatus(
+    questionId: string,
+    currentStatus?: boolean
+  ) {
+    const oldStatus = currentStatus === true;
+    const newStatus = !oldStatus;
+
+    try {
+      setUpdatingStatusId(questionId);
+
+      const {
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession();
+
+      if (sessionError || !session?.access_token) {
+        throw new Error(
+          "Authentication failed: " + (sessionError?.message || "No session")
+        );
+      }
+
+      // optimistic update
+      setQuestions((prev) =>
+        prev.map((q) =>
+          q.id === questionId ? { ...q, status: newStatus } : q
+        )
+      );
+
+      const res = await fetch(
+        `http://localhost:3001/api/questions/updatestatus/${questionId}`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({
+            status: newStatus,
+          }),
+        }
+      );
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => null);
+
+        // revert if API fails
+        setQuestions((prev) =>
+          prev.map((q) =>
+            q.id === questionId ? { ...q, status: oldStatus } : q
+          )
+        );
+
+        throw new Error(errData?.error || "Failed to update status");
+      }
+    } catch (error) {
+      console.error("toggleQuestionStatus error:", error);
+      alert(error instanceof Error ? error.message : "Failed to update status");
+    } finally {
+      setUpdatingStatusId(null);
     }
   }
 
@@ -159,16 +237,16 @@ function TrackerContent() {
   return (
     <div className="min-h-screen bg-[#0b0d12] text-white">
       <div className="border-b border-white/10 bg-[#0f1117]">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 md:px-8 lg:px-10 py-5 sm:py-6">
+        <div className="mx-auto max-w-6xl px-4 py-5 sm:px-6 sm:py-6 md:px-8 lg:px-10">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <p className="text-xs uppercase tracking-[0.2em] text-white/40">
                 PrepTrack
               </p>
-              <h1 className="mt-2 text-2xl sm:text-3xl font-semibold tracking-tight">
+              <h1 className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl">
                 Question Tracker
               </h1>
-              <p className="mt-2 text-sm text-white/55 max-w-2xl">
+              <p className="mt-2 max-w-2xl text-sm text-white/55">
                 Add and organize coding problems from different platforms in one
                 simple workspace.
               </p>
@@ -181,15 +259,15 @@ function TrackerContent() {
         </div>
       </div>
 
-      <main className="max-w-6xl mx-auto px-4 sm:px-6 md:px-8 lg:px-10 py-6 sm:py-8 md:py-10">
-        <div className="grid grid-cols-2 xl:grid-cols-4 gap-4 mb-6 sm:mb-8">
+      <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8 md:px-8 md:py-10 lg:px-10">
+        <div className="mb-6 grid grid-cols-2 gap-4 sm:mb-8 xl:grid-cols-4">
           <StatCard label="Total" value={questions.length} />
           <StatCard label="Easy" value={easyCount} />
           <StatCard label="Medium" value={mediumCount} />
           <StatCard label="Hard" value={hardCount} />
         </div>
 
-        <section className="rounded-2xl border border-white/10 bg-[#12151d] p-4 sm:p-6 shadow-sm mb-6 sm:mb-8">
+        <section className="mb-6 rounded-2xl border border-white/10 bg-[#12151d] p-4 shadow-sm sm:mb-8 sm:p-6">
           <div className="mb-5">
             <h2 className="text-lg font-semibold tracking-tight">Add question</h2>
             <p className="mt-1 text-sm text-white/50">
@@ -197,7 +275,7 @@ function TrackerContent() {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-[100px_minmax(0,1fr)_180px_160px_auto] gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-[100px_minmax(0,1fr)_180px_160px_auto]">
             <Input setValue={setSi} label="No." type="number" value={si} />
             <Input
               setValue={setUrl}
@@ -223,7 +301,7 @@ function TrackerContent() {
                 type="button"
                 onClick={createQuestion}
                 disabled={loading}
-                className="h-11 w-full xl:w-auto px-5 rounded-xl bg-white text-black text-sm font-medium hover:bg-neutral-200 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                className="h-11 w-full rounded-xl bg-white px-5 text-sm font-medium text-black transition hover:bg-neutral-200 disabled:cursor-not-allowed disabled:opacity-50 xl:w-auto"
               >
                 {loading ? "Adding..." : "Add Question"}
               </button>
@@ -231,7 +309,12 @@ function TrackerContent() {
           </div>
         </section>
 
-        <QuestionsList questions={questions} loading={questionsLoading} />
+        <QuestionsList
+          questions={questions}
+          loading={questionsLoading}
+          onToggleStatus={toggleQuestionStatus}
+          updatingStatusId={updatingStatusId}
+        />
       </main>
     </div>
   );
@@ -240,9 +323,13 @@ function TrackerContent() {
 function QuestionsList({
   questions,
   loading,
+  onToggleStatus,
+  updatingStatusId,
 }: {
   questions: Question[];
   loading: boolean;
+  onToggleStatus: (questionId: string, currentStatus?: boolean) => void;
+  updatingStatusId: string | null;
 }) {
   if (loading) {
     return (
@@ -254,9 +341,9 @@ function QuestionsList({
 
   if (questions.length === 0) {
     return (
-      <div className="rounded-2xl border border-white/10 bg-[#12151d] p-8 sm:p-10 text-center">
+      <div className="rounded-2xl border border-white/10 bg-[#12151d] p-8 text-center sm:p-10">
         <h3 className="text-lg font-semibold tracking-tight">No questions yet</h3>
-        <p className="mt-2 text-sm text-white/50 max-w-md mx-auto">
+        <p className="mx-auto mt-2 max-w-md text-sm text-white/50">
           Start by adding your first coding question from LeetCode, Codeforces,
           CodeChef, or AtCoder.
         </p>
@@ -266,30 +353,35 @@ function QuestionsList({
 
   return (
     <>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 lg:hidden">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:hidden">
         {questions.map((q) => (
           <div
             key={q.id}
             className="rounded-2xl border border-white/10 bg-[#12151d] p-4"
           >
-            <div className="flex items-start justify-between gap-3 mb-4">
+            <div className="mb-4 flex items-start justify-between gap-3">
               <div>
-                <p className="text-xs text-white/40 mb-1">Question No.</p>
-                <p className="text-sm font-semibold">{q.si}</p>
+                <p className="mb-1 text-xs text-white/40">Question No.</p>
+                <p className="text-sm font-semibold">{q.si ?? "-"}</p>
               </div>
-              <StatusBadge status={q.status || "Todo"} />
+
+              <StatusToggle
+                status={q.status}
+                disabled={updatingStatusId === q.id}
+                onChange={() => onToggleStatus(q.id, q.status)}
+              />
             </div>
 
             <div className="space-y-3">
               <InfoRow label="Platform" value={q.platform} />
               <InfoRow label="Difficulty" value={q.difficulty} />
               <div>
-                <p className="text-xs text-white/40 mb-1">Link</p>
+                <p className="mb-1 text-xs text-white/40">Link</p>
                 <a
                   href={q.url}
                   target="_blank"
                   rel="noreferrer"
-                  className="text-sm text-blue-400 hover:underline break-all"
+                  className="break-all text-sm text-blue-400 hover:underline"
                 >
                   {q.title || q.url}
                 </a>
@@ -299,8 +391,8 @@ function QuestionsList({
         ))}
       </div>
 
-      <div className="hidden lg:block rounded-2xl border border-white/10 bg-[#12151d] overflow-hidden">
-        <div className="px-5 sm:px-6 py-4 border-b border-white/10">
+      <div className="hidden overflow-hidden rounded-2xl border border-white/10 bg-[#12151d] lg:block">
+        <div className="border-b border-white/10 px-5 py-4 sm:px-6">
           <h2 className="text-lg font-semibold tracking-tight">All Questions</h2>
         </div>
 
@@ -308,36 +400,46 @@ function QuestionsList({
           <table className="w-full min-w-[760px] text-sm">
             <thead className="bg-white/5 text-white/45">
               <tr>
-                <th className="text-left px-5 sm:px-6 py-4 font-medium">No.</th>
-                <th className="text-left px-5 sm:px-6 py-4 font-medium">Platform</th>
-                <th className="text-left px-5 sm:px-6 py-4 font-medium">Difficulty</th>
-                <th className="text-left px-5 sm:px-6 py-4 font-medium">Link</th>
-                <th className="text-left px-5 sm:px-6 py-4 font-medium">Status</th>
+                <th className="px-5 py-4 text-left font-medium sm:px-6">No.</th>
+                <th className="px-5 py-4 text-left font-medium sm:px-6">
+                  Platform
+                </th>
+                <th className="px-5 py-4 text-left font-medium sm:px-6">
+                  Difficulty
+                </th>
+                <th className="px-5 py-4 text-left font-medium sm:px-6">Link</th>
+                <th className="px-5 py-4 text-left font-medium sm:px-6">
+                  Status
+                </th>
               </tr>
             </thead>
             <tbody>
               {questions.map((q) => (
                 <tr
                   key={q.id}
-                  className="border-t border-white/5 hover:bg-white/[0.03] transition"
+                  className="border-t border-white/5 transition hover:bg-white/[0.03]"
                 >
-                  <td className="px-5 sm:px-6 py-4">{q.si}</td>
-                  <td className="px-5 sm:px-6 py-4">{q.platform}</td>
-                  <td className="px-5 sm:px-6 py-4">
+                  <td className="px-5 py-4 sm:px-6">{q.si ?? "-"}</td>
+                  <td className="px-5 py-4 sm:px-6">{q.platform}</td>
+                  <td className="px-5 py-4 sm:px-6">
                     <DifficultyBadge difficulty={q.difficulty} />
                   </td>
-                  <td className="px-5 sm:px-6 py-4 max-w-[340px]">
+                  <td className="max-w-[340px] px-5 py-4 sm:px-6">
                     <a
                       href={q.url}
                       target="_blank"
                       rel="noreferrer"
-                      className="text-blue-400 hover:underline break-all"
+                      className="break-all text-blue-400 hover:underline"
                     >
                       {q.title || q.url}
                     </a>
                   </td>
-                  <td className="px-5 sm:px-6 py-4">
-                    <StatusBadge status={q.status || "Todo"} />
+                  <td className="px-5 py-4 sm:px-6">
+                    <StatusToggle
+                      status={q.status}
+                      disabled={updatingStatusId === q.id}
+                      onChange={() => onToggleStatus(q.id, q.status)}
+                    />
                   </td>
                 </tr>
               ))}
@@ -349,10 +451,55 @@ function QuestionsList({
   );
 }
 
+function StatusToggle({
+  status,
+  onChange,
+  disabled = false,
+}: {
+  status?: boolean;
+  onChange: () => void;
+  disabled?: boolean;
+}) {
+  const checked = status === true;
+
+  return (
+    <label className="inline-flex cursor-pointer select-none items-center gap-3">
+      <span className="relative inline-flex items-center justify-center">
+        <input
+          type="checkbox"
+          checked={checked}
+          onChange={onChange}
+          disabled={disabled}
+          className="peer sr-only"
+        />
+        <span className="flex h-5 w-5 items-center justify-center rounded border border-white/25 bg-transparent transition peer-checked:border-white peer-disabled:cursor-not-allowed peer-disabled:opacity-50">
+          <svg
+            className="h-3.5 w-3.5 text-white opacity-0 transition peer-checked:opacity-100"
+            viewBox="0 0 20 20"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.5"
+          >
+            <path
+              d="M5 10.5l3 3 7-7"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </span>
+      </span>
+
+      <span className="text-xs font-medium text-white/80">
+        {disabled ? "Updating..." : checked ? "Solved" : "Unsolved"}
+      </span>
+    </label>
+  );
+}
+
 function StatCard({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-[#12151d] px-4 sm:px-5 py-4 min-h-[92px] flex flex-col justify-center">
-      <div className="text-[11px] uppercase tracking-[0.18em] text-white/40 mb-2">
+    <div className="flex min-h-[92px] flex-col justify-center rounded-2xl border border-white/10 bg-[#12151d] px-4 py-4 sm:px-5">
+      <div className="mb-2 text-[11px] uppercase tracking-[0.18em] text-white/40">
         {label}
       </div>
       <div className="text-2xl font-semibold tracking-tight">{value}</div>
@@ -374,7 +521,7 @@ function Input({
   placeholder?: string;
 }) {
   return (
-    <div className="flex flex-col gap-2 w-full min-w-0">
+    <div className="flex min-w-0 w-full flex-col gap-2">
       <label className="text-sm text-white/70">{label}</label>
       <input
         value={value}
@@ -389,7 +536,7 @@ function Input({
           )
         }
         type={type}
-        className="h-11 w-full min-w-0 rounded-xl bg-[#0d1016] border border-white/10 px-3.5 text-sm text-white placeholder:text-white/25 focus:outline-none focus:ring-2 focus:ring-white/20 focus:border-white/20"
+        className="h-11 w-full min-w-0 rounded-xl border border-white/10 bg-[#0d1016] px-3.5 text-sm text-white placeholder:text-white/25 focus:border-white/20 focus:outline-none focus:ring-2 focus:ring-white/20"
       />
     </div>
   );
@@ -407,12 +554,12 @@ function Select({
   value: string;
 }) {
   return (
-    <div className="flex flex-col gap-2 w-full min-w-0">
+    <div className="flex min-w-0 w-full flex-col gap-2">
       <label className="text-sm text-white/70">{label}</label>
       <select
         value={value}
         onChange={(e) => setValue(e.target.value)}
-        className="h-11 w-full min-w-0 rounded-xl bg-[#0d1016] text-white border border-white/10 px-3.5 text-sm focus:outline-none focus:ring-2 focus:ring-white/20 focus:border-white/20"
+        className="h-11 w-full min-w-0 rounded-xl border border-white/10 bg-[#0d1016] px-3.5 text-sm text-white focus:border-white/20 focus:outline-none focus:ring-2 focus:ring-white/20"
       >
         <option value="">Select</option>
         {options.map((o) => (
@@ -425,35 +572,17 @@ function Select({
   );
 }
 
-function StatusBadge({
-  status,
-}: {
-  status: "Solved" | "Attempted" | "Todo";
-}) {
-  const styles = {
-    Solved: "bg-emerald-500/10 text-emerald-300 border border-emerald-500/20",
-    Attempted: "bg-amber-500/10 text-amber-300 border border-amber-500/20",
-    Todo: "bg-white/5 text-white/70 border border-white/10",
-  };
-
-  return (
-    <span className={`inline-flex rounded-full px-2.5 py-1 text-xs ${styles[status]}`}>
-      {status}
-    </span>
-  );
-}
-
 function DifficultyBadge({ difficulty }: { difficulty: string }) {
   const styles: Record<string, string> = {
-    Easy: "bg-emerald-500/10 text-emerald-300 border border-emerald-500/20",
-    Medium: "bg-amber-500/10 text-amber-300 border border-amber-500/20",
-    Hard: "bg-rose-500/10 text-rose-300 border border-rose-500/20",
+    Easy: "border border-emerald-500/20 bg-emerald-500/10 text-emerald-300",
+    Medium: "border border-amber-500/20 bg-amber-500/10 text-amber-300",
+    Hard: "border border-rose-500/20 bg-rose-500/10 text-rose-300",
   };
 
   return (
     <span
       className={`inline-flex rounded-full px-2.5 py-1 text-xs ${
-        styles[difficulty] || "bg-white/5 text-white/70 border border-white/10"
+        styles[difficulty] || "border border-white/10 bg-white/5 text-white/70"
       }`}
     >
       {difficulty}
@@ -464,7 +593,7 @@ function DifficultyBadge({ difficulty }: { difficulty: string }) {
 function InfoRow({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <p className="text-xs text-white/40 mb-1">{label}</p>
+      <p className="mb-1 text-xs text-white/40">{label}</p>
       <p className="text-sm text-white">{value}</p>
     </div>
   );

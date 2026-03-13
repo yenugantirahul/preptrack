@@ -12,7 +12,7 @@ const PORT = process.env.PORT || 50001;
 
 app.use(
   cors({
-    origin: ["https://preptrack-ten.vercel.app", "http://localhost:3000"],
+    origin: ["https://preptrack-rho.vercel.app", "http://localhost:3000"],
     credentials: true,
   }),
 );

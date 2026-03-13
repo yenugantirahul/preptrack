@@ -1,15 +1,12 @@
-// middleware/authMiddleware.js
-
 import dotenv from "dotenv";
 dotenv.config();
 import { createClient } from "@supabase/supabase-js";
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
-// Helper to get authenticated user
 async function getAuthenticatedUser(req) {
   const authHeader = req.headers.authorization;
 
@@ -17,7 +14,7 @@ async function getAuthenticatedUser(req) {
     throw new Error("Missing token");
   }
 
-const token = authHeader.split(" ")[1];
+  const token = authHeader.split(" ")[1];
 
   const {
     data: { user },
@@ -31,23 +28,21 @@ const token = authHeader.split(" ")[1];
   return user;
 }
 
-// =============================
 // CREATE SHEET
-// =============================
 export const createSheet = async (req, res) => {
   try {
     const user = await getAuthenticatedUser(req);
     const userId = user.id;
 
-    const { title } = req.body;
+    const { title, desc } = req.body;
 
     if (!title || title.trim() === "") {
       return res.status(400).json({ error: "Title is required" });
     }
 
     const trimmedTitle = title.trim();
+    const trimmedDesc = desc?.trim() || "";
 
-    // Check if sheet already exists for this user
     const { count, error: countError } = await supabase
       .from("Sheets")
       .select("id", { count: "exact", head: true })
@@ -64,13 +59,13 @@ export const createSheet = async (req, res) => {
       });
     }
 
-    // Insert new sheet with authenticated user ID
     const { data, error } = await supabase
       .from("Sheets")
       .insert([
         {
           title: trimmedTitle,
-          userid: userId, // ✅ ALWAYS from authenticated user
+          Description: trimmedDesc,
+          userid: userId,
         },
       ])
       .select()
@@ -89,9 +84,7 @@ export const createSheet = async (req, res) => {
   }
 };
 
-// =============================
 // GET SHEETS
-// =============================
 export async function getSheets(req, res) {
   try {
     const user = await getAuthenticatedUser(req);
@@ -113,40 +106,34 @@ export async function getSheets(req, res) {
   }
 }
 
-export async function deleteSheet(req, res) {
+// DELETE SHEET
+export const deleteSheet = async (req, res) => {
   try {
     const user = await getAuthenticatedUser(req);
     const userId = user.id;
+    const { id } = req.params;
 
-    const title = req.params.title;
-
-    if (!title) {
-      return res.status(400).json({ error: "Title is required" });
-    }
-
-    // ✅ Delete ONLY sheet that belongs to current user
     const { data, error } = await supabase
       .from("Sheets")
       .delete()
+      .eq("id", id)
       .eq("userid", userId)
-      .eq("title", title)
-      .select(); // return deleted row
+      .select();
 
     if (error) {
-      return res.status(400).json({ error: error.message });
+      return res.status(500).json({ error: error.message });
     }
 
     if (!data || data.length === 0) {
-      return res.status(404).json({
-        error: "Sheet not found or not owned by user",
-      });
+      return res
+        .status(404)
+        .json({ error: "Sheet not found or not authorized" });
     }
 
     return res.status(200).json({
-      deleted: data,
       message: "Deleted successfully",
     });
-  } catch (err) {
-    return res.status(401).json({ error: err.message });
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
   }
-}
+};

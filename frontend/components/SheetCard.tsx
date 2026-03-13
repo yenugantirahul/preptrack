@@ -48,7 +48,7 @@ export default function SheetCard({
         </button>
 
         <div className="pr-12">
-          <h3 className="text-lg font-semibold tracking-tight text-white line-clamp-1">
+          <h3 className="line-clamp-1 text-lg font-semibold tracking-tight text-white">
             {title}
           </h3>
 
