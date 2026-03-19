@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { API_BASE_URL } from "@/lib/api";
 
 interface Question {
   id: string;
@@ -53,7 +54,7 @@ function TrackerContent() {
       setQuestionsLoading(true);
 
       const res = await fetch(
-        `http://localhost:3001/api/questions/getquestions/${id}`,
+        `${API_BASE_URL}/api/questions/getquestions/${id}`,
         {
           method: "GET",
         }
@@ -108,7 +109,7 @@ function TrackerContent() {
         );
       }
 
-      const res = await fetch("http://localhost:3001/api/questions/create", {
+      const res = await fetch(`${API_BASE_URL}/api/questions/create`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -135,7 +136,7 @@ function TrackerContent() {
       }
 
       const linkRes = await fetch(
-        "http://localhost:3001/api/questions/linkquestion",
+        `${API_BASE_URL}/api/questions/linkquestion`,
         {
           method: "POST",
           headers: {
@@ -194,7 +195,7 @@ async function toggleQuestionStatus(
     );
 
     const res = await fetch(
-      `http://localhost:3001/api/questions/updatestatus/${questionId}`,
+      `${API_BASE_URL}/api/questions/updatestatus/${questionId}`,
       {
         method: "PATCH",
         headers: {

@@ -11,45 +11,55 @@ interface Sheet {
   createdAt?: string;
 }
 
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
-
 const CreateSheetPage = () => {
   const [showForm, setShowForm] = useState(false);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [sheets, setSheets] = useState<Sheet[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [error, setError] = useState("");
 
   const supabase = useMemo(() => createClient(), []);
+
+  const getAccessToken = useCallback(async () => {
+    const {
+      data: { session },
+      error,
+    } = await supabase.auth.getSession();
+
+    if (error) {
+      throw error;
+    }
+
+    return session?.access_token ?? null;
+  }, [supabase]);
 
   const fetchSheets = useCallback(async () => {
     try {
       setLoading(true);
+      setError("");
 
-      const {
-        data: { session },
-        error: sessionError,
-      } = await supabase.auth.getSession();
+      console.time("fetchSheets total");
 
-      if (sessionError) {
-        throw sessionError;
-      }
+      console.time("getSession");
+      const token = await getAccessToken();
+      console.timeEnd("getSession");
 
-      if (!session?.access_token) {
-        console.warn("No active session found");
+      if (!token) {
         setSheets([]);
         return;
       }
 
-      const res = await fetch(`${API_BASE_URL}/api/sheets/get`, {
+      console.time("apiFetch");
+      const res = await fetch(`http://localhost:3001/api/sheets/get`, {
         method: "GET",
         headers: {
-          Authorization: `Bearer ${session.access_token}`,
+          Authorization: `Bearer ${token}`,
         },
       });
+      console.timeEnd("apiFetch");
 
       const data = await res.json().catch(() => null);
 
@@ -75,23 +85,34 @@ const CreateSheetPage = () => {
       setSheets(normalizedSheets);
     } catch (err) {
       console.error("fetchSheets error:", err);
+      setError(err instanceof Error ? err.message : "Failed to fetch sheets");
       setSheets([]);
     } finally {
+      console.timeEnd("fetchSheets total");
       setLoading(false);
     }
-  }, [supabase]);
+  }, [getAccessToken]);
 
-  const createSheet = async (title: string, desc: string, token: string) => {
+  const createSheet = async (sheetTitle: string, sheetDesc: string) => {
     try {
       setCreating(true);
 
-      const response = await fetch(`${API_BASE_URL}/api/sheets/create`, {
+      const token = await getAccessToken();
+
+      if (!token) {
+        throw new Error("User not authenticated");
+      }
+
+      const response = await fetch(`http://localhost:3001/api/sheets/create`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ title, desc }),
+        body: JSON.stringify({
+          title: sheetTitle,
+          desc: sheetDesc,
+        }),
       });
 
       const data = await response.json().catch(() => null);
@@ -99,8 +120,10 @@ const CreateSheetPage = () => {
       if (!response.ok) {
         throw new Error(data?.error || "Failed to create sheet");
       }
+
+      return data;
     } catch (err: any) {
-      console.error("createSheet error:", err.message);
+      console.error("createSheet error:", err);
       throw err;
     } finally {
       setCreating(false);
@@ -111,19 +134,16 @@ const CreateSheetPage = () => {
     try {
       setDeletingId(sheetId);
 
-      const {
-        data: { session },
-        error: sessionError,
-      } = await supabase.auth.getSession();
+      const token = await getAccessToken();
 
-      if (sessionError || !session?.access_token) {
+      if (!token) {
         throw new Error("User not authenticated");
       }
 
-      const res = await fetch(`${API_BASE_URL}/api/sheets/delete/${sheetId}`, {
+      const res = await fetch(`http://localhost:3001/api/sheets/delete/${sheetId}`, {
         method: "DELETE",
         headers: {
-          Authorization: `Bearer ${session.access_token}`,
+          Authorization: `Bearer ${token}`,
         },
       });
 
@@ -134,9 +154,9 @@ const CreateSheetPage = () => {
       }
 
       setSheets((prev) => prev.filter((sheet) => sheet.id !== sheetId));
-    } catch (error) {
-      console.error("deleteSheet error:", error);
-      alert(error instanceof Error ? error.message : "Failed to delete sheet");
+    } catch (err) {
+      console.error("deleteSheet error:", err);
+      alert(err instanceof Error ? err.message : "Failed to delete sheet");
     } finally {
       setDeletingId(null);
     }
@@ -149,13 +169,19 @@ const CreateSheetPage = () => {
   useEffect(() => {
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session) {
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "SIGNED_IN" && session) {
         fetchSheets();
+      }
+
+      if (event === "SIGNED_OUT") {
+        setSheets([]);
       }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      subscription.unsubscribe();
+    };
   }, [supabase, fetchSheets]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -169,25 +195,17 @@ const CreateSheetPage = () => {
       return;
     }
 
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-
-    const token = session?.access_token;
-
-    if (!token) {
-      alert("User not authenticated");
-      return;
-    }
-
     try {
-      await createSheet(trimmedTitle, trimmedDescription, token);
+      await createSheet(trimmedTitle, trimmedDescription);
+
       setTitle("");
       setDescription("");
       setShowForm(false);
+
       await fetchSheets();
     } catch (err) {
       console.error("handleSubmit error:", err);
+      alert(err instanceof Error ? err.message : "Failed to create sheet");
     }
   };
 
@@ -297,6 +315,19 @@ const CreateSheetPage = () => {
                   className="h-52 animate-pulse rounded-2xl border border-white/10 bg-[#12151d]"
                 />
               ))}
+            </div>
+          ) : error ? (
+            <div className="flex min-h-[260px] flex-col items-center justify-center rounded-2xl border border-dashed border-red-500/20 bg-[#12151d] px-6 text-center">
+              <h3 className="text-xl font-semibold tracking-tight text-red-400">
+                Failed to load sheets
+              </h3>
+              <p className="mt-2 max-w-md text-sm text-white/45">{error}</p>
+              <button
+                onClick={fetchSheets}
+                className="mt-6 h-11 rounded-xl bg-white px-5 text-sm font-medium text-black hover:bg-neutral-200"
+              >
+                Retry
+              </button>
             </div>
           ) : sheets.length === 0 ? (
             <div className="flex min-h-[260px] flex-col items-center justify-center rounded-2xl border border-dashed border-white/10 bg-[#12151d] px-6 text-center">
